@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 
-typedef struct input_struct{
+struct input_struct{
     char[] cmd
     *char[] args
 }input;
