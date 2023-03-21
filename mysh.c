@@ -25,11 +25,12 @@ struct input_struct{
 int main(int argc, char** argv){
 
     if (argc > 1){
-        //interactive mode
-
-    }
-    else{
         //bash mode
 
+    }
+    else if (argc < 1){
+
+    }else{
+        //interactive mode
     }
 }
