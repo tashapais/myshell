@@ -81,7 +81,25 @@ int main(){
     return 0
 }
 
+void main(){
+    int fd;
+    int refd;
+    char *buf="Sysyem Programming!\n";
+    fd = open("test.txt",O_RDWR|O_CREAT,0644);
+    if(fd==-1){
+        printf("open file error\n");
+        exit(-1);
+    }
+    refd = dup2(fd,fileno(stdout));
+    if(refd==-1){
+        printf("redirect standard out error\n");
+        exit(-1);
+    }
 
+    write(fileno(stdout),buf,strlen(buf));
+    close(fd);
+    exit(0);
+}
 
 int main(){
     int fd[2];
