@@ -91,7 +91,8 @@ void main(){
         exit(-1);
     }
     refd = dup2(fd,fileno(stdout));
-    if(refd==-1){
+    if(refd==-1)
+{
         printf("redirect standard out error\n");
         exit(-1);
     }
@@ -134,6 +135,7 @@ int main(){
     return 0;
 
 }    
+
 
         char **args;
         /*
