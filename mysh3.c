@@ -9,27 +9,29 @@
   
 #define MAXCOM 1000 // max number of letters to be supported
 #define MAXLIST 100 // max number of commands to be supported
-  
-// Clearing the shell using escape sequences
-#define clear() printf("\033[H\033[J")
 
-int errorFlag = 1;
+int errorFlag = 0;
+
+struct StringList{
+    char *data;
+    struct StringList *nextLine;
+};
+
+struct StringList *head;
   
 // Greeting shell during startup
 void init_shell()
 {
-    clear();
-    printf("\n\n\n\n******************"
+    //clear();
+   puts("\n\n\n\n******************"
         "************************");
-    printf("\n\n\n\t****MY SHELL INTERACTIVE MODE****");
-    printf("\n\n\t-USE AT YOUR OWN RISK-");
-    printf("\n\n\n\n*******************"
+    puts("\n\n\n****MY SHELL INTERACTIVE MODE****");
+    puts("\n\n\t-USE AT YOUR OWN RISK-");
+    puts("\n\n\n\n*******************"
         "***********************");
-    char* username = getenv("USER");
-    printf("\n\n\nUSER is: @%s", username);
-    printf("\n");
+    puts("\n");
     sleep(1);
-    clear();
+    //clear();
 }
   
 // Function to take input
@@ -55,7 +57,8 @@ void printDir()
 {
     char cwd[1024];
     getcwd(cwd, sizeof(cwd));
-    printf("\nDir: %s", cwd);
+    //puts("\nDir: ");
+    fprintf(stdout,"Dir: %s", cwd);
 }
   
 // Function where the system command is executed
@@ -65,12 +68,13 @@ void execArgs(char** parsed)
     pid_t pid = fork(); 
   
     if (pid == -1) {
-        printf("\nFailed forking child..");
+        perror("\nFailed forking child..");
         errorFlag = 1;
         return;
     } else if (pid == 0) {
+        //errorFlag = 0;
         if (execvp(parsed[0], parsed) < 0) {
-            printf("\nCould not execute command..");
+            perror("\nCould not execute command..");
             errorFlag = 1;
         }
         exit(0);
@@ -87,37 +91,44 @@ void execArgsPiped(char** parsed, char** parsedpipe)
     // 0 is read end, 1 is write end
     int pipefd[2]; 
     pid_t p1, p2;
-  
+    
+
     if (pipe(pipefd) < 0) {
-        printf("\nPipe could not be initialized");
+        perror("\nPipe could not be initialized");
         errorFlag = 1;
         return;
     }
     p1 = fork();
     if (p1 < 0) {
-        printf("\nCould not fork");
+        perror("\nCould not fork");
         errorFlag = 1;
         return;
     }
-  
+    printf("before if");
+    printf("p1: %d", p1==0);
     if (p1 == 0) {
+        puts("past if");
         // Child 1 executing..
         // It only needs to write at the write end
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
   
+        //errorFlag = 0;
+        fprintf(stdout, "parsed 3: %s", *parsed);
+        fprintf(stdout,"parsed[0] : %s", parsed[0]);
         if (execvp(parsed[0], parsed) < 0) {
-            printf("\nCould not execute command 1..");
+            perror("\nCould not execute command 1");
             errorFlag = 1;
             exit(0);
         }
     } else {
+        printf("in else");
         // Parent executing
         p2 = fork();
   
         if (p2 < 0) {
-            printf("\nCould not fork");
+            perror("\nCould not fork");
             errorFlag = 1;
             return;
         }
@@ -125,11 +136,12 @@ void execArgsPiped(char** parsed, char** parsedpipe)
         // Child 2 executing..
         // It only needs to read at the read end
         if (p2 == 0) {
+            //errorFlag = 0;
             close(pipefd[1]);
             dup2(pipefd[0], STDIN_FILENO);
             close(pipefd[0]);
             if (execvp(parsedpipe[0], parsedpipe) < 0) {
-                printf("\nCould not execute command 2..");
+                perror("\nCould not execute command 2..");
                 errorFlag = 1;
                 exit(0);
             }
@@ -152,6 +164,7 @@ void openHelp()
         "\n>exit"
         "\n>all other general commands available in UNIX shell"
         "\n>pipe handling"
+        "\n>redirection handling"
         "\n>improper space handling");
   
     return;
@@ -178,20 +191,20 @@ int ownCmdHandler(char** parsed)
   
     switch (switchOwnArg) {
     case 1:
-        printf("\nGoodbye\n");
+        puts("\nGoodbye\n");
         exit(0);
     case 2:
         chdir(parsed[1]);
+        //errorFlag = 0;
         return 1;
     case 3:
         openHelp();
+        errorFlag = 0;
         return 1;
     case 4:
         username = getenv("USER");
-        printf("\nHello %s.\nMind that this is "
-            "not a place to play around."
-            "\nUse help to know more..\n",
-            username);
+        fprintf(stdout, "\nHello %s.\nMind that this is not a place to play around.\nUse help to know more..\n", username);
+        errorFlag = 0;
         return 1;
     default:
         errorFlag = 1;
@@ -221,6 +234,7 @@ int parsePipe(char* str, char** strpiped)
 // function for parsing command words
 void parseSpace(char* str, char** parsed)
 {
+    //printf("parsed 2: %s", *parsed);
     int i;
   
     for (i = 0; i < MAXLIST; i++) {
@@ -231,11 +245,12 @@ void parseSpace(char* str, char** parsed)
         if (strlen(parsed[i]) == 0)
             i--;
     }
+    //printf("parsed 2: %s", *parsed);
 }
   
 int processString(char* str, char** parsed, char** parsedpipe)
 {
-  
+    //printf("Parsed: %s", *parsed);
     char* strpiped[2];
     int piped = 0;
   
@@ -256,22 +271,40 @@ int processString(char* str, char** parsed, char** parsedpipe)
         return 1 + piped;
 }
   
-int main()
+int main(int argc, char** argv)
 {
     char inputString[MAXCOM], *parsedArgs[MAXLIST];
     char* parsedArgsPiped[MAXLIST];
     int execFlag = 0;
+    FILE *batchFile = NULL;
+
     init_shell();
+    if (argc == 2){
+        read(STDIN_FILENO, batchFile, sizeof(batchFile));
+        if (batchFile == NULL){
+            perror("Failed to open batchfile");
+            errorFlag = 1;
+            exit(1);
+        }
+    }
   
     while (1) {
-        // print shell line
+        //handle batch mode
         printDir();
+        // if (batchFile == NULL){
+        //     // take input
+        //     if (takeInput(inputString))
+        //     continue;
+        // }else{
+        //     // take input
+        //     open(argv[1], O_RDONLY);
+        //     continue;
+        // }
         // take input
         if (takeInput(inputString))
             continue;
         // process
-        execFlag = processString(inputString,
-        parsedArgs, parsedArgsPiped);
+        execFlag = processString(inputString, parsedArgs, parsedArgsPiped);
         // execflag returns zero if there is no command
         // or it is a builtin command,
         // 1 if it is a simple command
@@ -280,9 +313,11 @@ int main()
         // execute
         if (execFlag == 1)
             execArgs(parsedArgs);
+            errorFlag = 0;
   
         if (execFlag == 2)
             execArgsPiped(parsedArgs, parsedArgsPiped);
+            errorFlag = 0;
     }
     return 0;
 }
