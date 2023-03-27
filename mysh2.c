@@ -12,7 +12,7 @@ int main(){
             perror("Failed to open batchfile");
             exit(1);
         }
-    }
+    } 
 
     //Process commands
     char line[256];
