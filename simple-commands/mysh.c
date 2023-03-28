@@ -45,14 +45,28 @@ int execute_command(char **args, int arg_count) {
         return 0;
     } else {
         pid_t pid = fork();
+        //When a command is not a built-in command like "exit" or "cd," 
+        //a child process is spawned using the fork() system call. 
+        //The process ID of the child process is stored in the pid variable.
         if (pid == 0) {
             if (execvp(args[0], args) == -1) {
                 perror(args[0]);
             }
             exit(EXIT_FAILURE);
+            //If pid == 0, the current process is the child process. 
+            //In this case, the command is executed using execvp(), 
+            //which replaces the current process image with a new process image 
+            //corresponding to the specified command. If the execution fails, 
+            //an error message is displayed using perror().
         } else if (pid < 0) {
             perror("fork");
+            //If pid < 0, the fork() system call has failed, and an error message is 
+            //displayed using perror().
         } else {
+            //If pid > 0, the current process is the parent process. 
+            //In this case, the parent process waits for the child process to complete 
+            //using the waitpid() system call. The exit status of the child process is 
+            //then extracted using the WEXITSTATUS() macro and returned to the caller.
             int status;
             waitpid(pid, &status, 0);
             return WEXITSTATUS(status);
