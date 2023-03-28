@@ -295,8 +295,8 @@ int main(int argc, char** argv)
             char buffer[2048];
             read(batchFile, buffer, sizeof(buffer));
             //printf("buffer: %s", buffer);
-            
-            continue;
+
+            break;
         }
         // take input
         // if (takeInput(inputString))
