@@ -1,131 +1,143 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
-#include <dirent.h>
+
+#define BUFFER_SIZE 1024
+#define MAX_ARGS 64
+#define DELIMITERS " \t\r\n\a"
+
+int last_exit_status = 0;
+
+int parse_line(char *line, char **args) {
+    int arg_count = 0;
+    char *token = strtok(line, DELIMITERS);
+
+    while (token != NULL) {
+        args[arg_count++] = token;
+        token = strtok(NULL, DELIMITERS);
+    }
+    args[arg_count] = NULL;
+    return arg_count;
+}
 
 int execute_command(char **args, int arg_count) {
-    //printf("Executing command: %s\n", args[0]);
-
     if (!args[0]) {
         return 1;
     }
 
     if (strcmp(args[0], "exit") == 0) {
-        exit(0);
-    } else if (strcmp(args[0], "cd") == 0) { //checks if the first argument (the command name) in the args array is equal to the string "cd"
-        if (arg_count > 1) { //ensure that there is at least one additional argument provided (i.e., the target directory)
-            if (chdir(args[1]) == -1) { //chdir() function is called with the second argument in the args array, which should be the target directory
-                perror("cd"); //If the chdir() call is successful, it returns 0. If it fails, it returns -1.
-                return 1; //function returns 1 to indicate that the command failed
+        exit(EXIT_SUCCESS);
+    } else if (strcmp(args[0], "cd") == 0) {
+        if (arg_count > 1) {
+            if (chdir(args[1]) == -1) {
+                perror("cd");
+                return 1;
             }
         } else {
             fprintf(stderr, "cd: missing operand\n");
-            return 1;
-            //If the arg_count is not greater than 1, meaning no additional argument was provided for the cd command, 
-            //an error message is printed to stderr stating that the operand is missing, 
-            //and the function returns 1 to indicate the command failed.
-        }
-        return 0;
-        //If the chdir() function call was successful, the function returns 0 
-        //to indicate that the cd command was executed without any issues
-    } else if (strcmp(args[0], "pwd") == 0) {
-        char cwd[1024];
-        getcwd(cwd, sizeof(cwd));
-        printf("%s\n", cwd);
-        return 0;
-    } else if (strcmp(args[0], "echo") == 0) {
-        for (int i = 1; i < arg_count; i++) {
-            printf("%s ", args[i]);
-        }
-        printf("\n");
-        return 0;
-    } else if (strcmp(args[0], "mkdir") == 0) {
-        if (arg_count > 1) {
-            if (mkdir(args[1], 0755) == -1) {
-                perror("mkdir");
-                return 1;
-            }
-        } else {
-            fprintf(stderr, "mkdir: missing operand\n");
-            return 1;
-        }
-        return 0;
-    } else if (strcmp(args[0], "rmdir") == 0) {
-        if (arg_count > 1) {
-            if (rmdir(args[1]) == -1) {
-                perror("rmdir");
-                return 1;
-            }
-        } else {
-            fprintf(stderr, "rmdir: missing operand\n");
             return 1;
         }
         return 0;
     } else {
         pid_t pid = fork();
         if (pid == 0) {
-            execvp(args[0], args);
-            perror("execvp");
-            exit(1);
+            if (execvp(args[0], args) == -1) {
+                perror(args[0]);
+            }
+            exit(EXIT_FAILURE);
+        } else if (pid < 0) {
+            perror("fork");
         } else {
             int status;
             waitpid(pid, &status, 0);
             return WEXITSTATUS(status);
         }
     }
+    return 0;
 }
 
+void print_prompt() {
+    if (last_exit_status == 0) {
+        write(STDOUT_FILENO, "mysh> ", 6);
+    } else {
+        write(STDOUT_FILENO, "!mysh> ", 7);
+    }
+}
 
 int main(int argc, char *argv[]) {
-    FILE *input_file = stdin;
+
+    /*There is one input loop and command parsing algorithm that works for both batch 
+    and interactive modes. The main difference between the two modes is the input source, 
+    which is determined by the input_fd variable. When running in batch mode, 
+    input_fd is set to the file descriptor of the specified input file. 
+    When running in interactive mode, input_fd is set to the standard input file 
+    descriptor DIN_FILENO) */
+    
+    char buffer[BUFFER_SIZE];
+    char *args[MAX_ARGS];
+    int arg_count;
+    int exit_status;
+    int input_fd = STDIN_FILENO;
 
     if (argc == 2) {
-        input_file = fopen(argv[1], "r");
-        if (!input_file) {
-            perror("fopen");
-            exit(1);
+    //If there is an argument provided, the code opens the specified file 
+    //and sets input_fd to the file descriptor of the opened file. 
+    //Otherwise, it sets input_fd to the standard input file descriptor (STDIN_FILENO)
+        input_fd = open(argv[1], O_RDONLY);
+        if (input_fd == -1) {
+            perror("mysh");
+            exit(EXIT_FAILURE);
         }
-    } else if (argc > 2) {
-        fprintf(stderr, "Usage: %s [script_file]\n", argv[0]);
-        exit(1);
+    } else {
+        write(STDOUT_FILENO, "Welcome to my shell!\n", 20);
     }
-
-    if (input_file == stdin) {
-        printf("Welcome to my shell!\n");
-    }
-
-    char buffer[4096];
-    int last_command_failed = 0;
 
     while (1) {
-        //printf("Reading input...\n");
-        if (input_file == stdin) {
-            printf("%smysh> ", last_command_failed ? "!" : "");
+    //The main input loop reads input one line at a time, regardless of the mode
+    //In interactive mode, the shell prompt is printed before reading each line.
+        if (input_fd == STDIN_FILENO) {
+            print_prompt();
         }
 
-        if (fgets(buffer, sizeof(buffer), input_file) == NULL || feof(input_file)) {
+        ssize_t read_size = 0;
+        size_t buffer_idx = 0;
+
+        while (1) {
+            char c;
+            read_size = read(input_fd, &c, 1);
+
+            if (read_size == -1) {
+                perror("mysh");
+                break;
+            }
+
+            if (read_size == 0 || c == '\n') {
+                buffer[buffer_idx] = '\0';
+                break;
+            }
+
+            buffer[buffer_idx++] = c;
+        }
+
+        if (read_size == 0) {
             break;
         }
 
-        char *args[64];
-        int arg_count = 0;
-
-        char *token = strtok(buffer, " \n");
-        while (token) {
-            args[arg_count++] = token;
-            token = strtok(NULL, " \n");
-        }
-        args[arg_count] = NULL;
-
-        last_command_failed = execute_command(args, arg_count);
+        arg_count = parse_line(buffer, args);
+        exit_status = execute_command(args, arg_count);
+        last_exit_status = exit_status;
     }
 
-    if (input_file == stdin) {
-        printf("mysh: exiting\n");
+    if (argc == 2) {
+        close(input_fd);
+    } else {
+        write(STDOUT_FILENO, "mysh: exiting\n", 13);
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }
