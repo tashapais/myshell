@@ -1,23 +1,24 @@
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include<unistd.h>
-#include<sys/types.h>
-#include<sys/wait.h>
-#include<readline/readline.h>
-#include<readline/history.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+#include <fcntl.h>
   
 #define MAXCOM 1000 // max number of letters to be supported
 #define MAXLIST 100 // max number of commands to be supported
 
 int errorFlag = 0;
 
-struct StringList{
-    char *data;
-    struct StringList *nextLine;
-};
+// struct StringList{
+//     char *data;
+//     struct StringList *nextLine;
+// };
 
-struct StringList *head;
+// struct StringList *head;
   
 // Greeting shell during startup
 void init_shell()
@@ -173,14 +174,13 @@ void openHelp()
 // Function to execute builtin commands
 int ownCmdHandler(char** parsed)
 {
-    int NoOfOwnCmds = 4, i, switchOwnArg = 0;
+    int NoOfOwnCmds = 3, i, switchOwnArg = 0;
     char* ListOfOwnCmds[NoOfOwnCmds];
     char* username;
   
     ListOfOwnCmds[0] = "exit";
     ListOfOwnCmds[1] = "cd";
-    ListOfOwnCmds[2] = "help";
-    ListOfOwnCmds[3] = "hello";
+    ListOfOwnCmds[2] = "pwd";
   
     for (i = 0; i < NoOfOwnCmds; i++) {
         if (strcmp(parsed[0], ListOfOwnCmds[i]) == 0) {
@@ -198,13 +198,8 @@ int ownCmdHandler(char** parsed)
         //errorFlag = 0;
         return 1;
     case 3:
-        openHelp();
-        errorFlag = 0;
-        return 1;
-    case 4:
-        username = getenv("USER");
-        fprintf(stdout, "\nHello %s.\nMind that this is not a place to play around.\nUse help to know more..\n", username);
-        errorFlag = 0;
+        printDir();
+        //errorFlag = 0;
         return 1;
     default:
         errorFlag = 1;
@@ -276,12 +271,11 @@ int main(int argc, char** argv)
     char inputString[MAXCOM], *parsedArgs[MAXLIST];
     char* parsedArgsPiped[MAXLIST];
     int execFlag = 0;
-    FILE *batchFile = NULL;
+    int batchFile = -1;
 
-    init_shell();
     if (argc == 2){
-        read(STDIN_FILENO, batchFile, sizeof(batchFile));
-        if (batchFile == NULL){
+        batchFile = open(argv[1], O_RDONLY);
+        if (batchFile == -1){
             perror("Failed to open batchfile");
             errorFlag = 1;
             exit(1);
@@ -290,20 +284,26 @@ int main(int argc, char** argv)
   
     while (1) {
         //handle batch mode
-        printDir();
-        // if (batchFile == NULL){
-        //     // take input
-        //     if (takeInput(inputString))
-        //     continue;
-        // }else{
-        //     // take input
-        //     open(argv[1], O_RDONLY);
-        //     continue;
-        // }
-        // take input
-        if (takeInput(inputString))
+        //printDir();
+        if (batchFile == -1){
+            // take input
+            init_shell();
+            if (takeInput(inputString))
             continue;
+        }else{
+            // take input
+            char buffer[2048];
+            read(batchFile, buffer, sizeof(buffer));
+            //printf("buffer: %s", buffer);
+            
+            continue;
+        }
+        // take input
+        // if (takeInput(inputString))
+        //     continue;
         // process
+
+
         execFlag = processString(inputString, parsedArgs, parsedArgsPiped);
         // execflag returns zero if there is no command
         // or it is a builtin command,
