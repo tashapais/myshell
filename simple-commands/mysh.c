@@ -11,7 +11,7 @@
 
 #define BUFFER_SIZE 1024
 #define MAX_ARGS 64
-#define DELIMITERS " \t\r\n\a|<>"
+#define DELIMITERS " \t\r\n\a"
 
 int last_exit_status = 0;
 
@@ -46,33 +46,26 @@ int parse_line(char *line, char **args) {
 int handle_redirection(char **args, int *input_fd, int *output_fd) {
     for (int i = 0; args[i] != NULL; i++) {
         if (strcmp(args[i], "<") == 0) {
-            if (args[i + 1] != NULL) {
-                *input_fd = open(args[i + 1], O_RDONLY);
-                if (*input_fd < 0) {
-                    perror(args[i + 1]);
-                    return 1;
-                }
-                args[i] = NULL;
-            } else {
-                fprintf(stderr, "mysh: syntax error near unexpected token `<'\n");
+            args[i] = NULL;
+            *input_fd = open(args[i + 1], O_RDONLY);
+            if (*input_fd == -1) {
+                perror("mysh");
                 return 1;
             }
+            i++;
         } else if (strcmp(args[i], ">") == 0) {
-            if (args[i + 1] != NULL) {
-                *output_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0640);
-                if (*output_fd < 0) {
-                    perror(args[i + 1]);
-                    return 1;
-                }
-                args[i] = NULL;
-            } else {
-                fprintf(stderr, "mysh: syntax error near unexpected token `>'\n");
+            args[i] = NULL;
+            *output_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP);
+            if (*output_fd == -1) {
+                perror("mysh");
                 return 1;
             }
+            i++;
         }
     }
     return 0;
 }
+
 
 int find_pipe_index(char **args) {
     for (int i = 0; args[i] != NULL; i++) {
