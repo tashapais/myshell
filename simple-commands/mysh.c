@@ -1,4 +1,3 @@
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +5,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <limits.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_ARGS 64
@@ -25,14 +26,12 @@ int parse_line(char *line, char **args) {
     return arg_count;
 }
 
-int execute_command(char **args, int arg_count) {
-    if (!args[0]) {
-        return 1;
+int execute_command(char *args[], int arg_count) {
+    if (arg_count == 0) {
+        return 0;
     }
 
-    if (strcmp(args[0], "exit") == 0) {
-        exit(EXIT_SUCCESS);
-    } else if (strcmp(args[0], "cd") == 0) {
+    if (strcmp(args[0], "cd") == 0) {
         if (arg_count > 1) {
             if (chdir(args[1]) == -1) {
                 perror("cd");
@@ -43,37 +42,75 @@ int execute_command(char **args, int arg_count) {
             return 1;
         }
         return 0;
-    } else {
-        pid_t pid = fork();
-        //When a command is not a built-in command like "exit" or "cd," 
-        //a child process is spawned using the fork() system call. 
-        //The process ID of the child process is stored in the pid variable.
-        if (pid == 0) {
-            if (execvp(args[0], args) == -1) {
-                perror(args[0]);
+    }
+
+    if (strcmp(args[0], "echo") == 0) {
+        for (int i = 1; i < arg_count; i++) {
+            write(STDOUT_FILENO, args[i], strlen(args[i]));
+            write(STDOUT_FILENO, " ", 1);
+        }
+        write(STDOUT_FILENO, "\n", 1);
+        return 0;
+    }
+
+    if (strcmp(args[0], "exit") == 0) {
+        return -1;
+    }
+
+    if (strcmp(args[0], "mkdir") == 0) {
+        if (arg_count > 1) {
+            if (mkdir(args[1], 0755) == -1) {
+                perror("mkdir");
+                return 1;
             }
-            exit(EXIT_FAILURE);
-            //If pid == 0, the current process is the child process. 
-            //In this case, the command is executed using execvp(), 
-            //which replaces the current process image with a new process image 
-            //corresponding to the specified command. If the execution fails, 
-            //an error message is displayed using perror().
-        } else if (pid < 0) {
-            perror("fork");
-            //If pid < 0, the fork() system call has failed, and an error message is 
-            //displayed using perror().
         } else {
-            //If pid > 0, the current process is the parent process. 
-            //In this case, the parent process waits for the child process to complete 
-            //using the waitpid() system call. The exit status of the child process is 
-            //then extracted using the WEXITSTATUS() macro and returned to the caller.
-            int status;
-            waitpid(pid, &status, 0);
+            fprintf(stderr, "mkdir: missing operand\n");
+            return 1;
+        }
+        return 0;
+    }
+
+    if (strcmp(args[0], "pwd") == 0) {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, PATH_MAX) != NULL) {
+            write(STDOUT_FILENO, cwd, strlen(cwd));
+            write(STDOUT_FILENO, "\n", 1);
+        } else {
+            perror("pwd");
+            return 1;
+        }
+        return 0;
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("mysh");
+        return 1;
+    }
+
+    if (pid == 0) {
+        if (execvp(args[0], args) == -1) {
+            perror(args[0]);
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("mysh");
+            return 1;
+        }
+        if (WIFEXITED(status)) {
             return WEXITSTATUS(status);
+        } else if (WIFSIGNALED(status)) {
+            fprintf(stderr, "%s terminated by signal %d\n", args[0], WTERMSIG(status));
+            return 1;
         }
     }
+
     return 0;
 }
+
 
 void print_prompt() {
     if (last_exit_status == 0) {
@@ -84,38 +121,30 @@ void print_prompt() {
 }
 
 int main(int argc, char *argv[]) {
-
-    /*There is one input loop and command parsing algorithm that works for both batch 
-    and interactive modes. The main difference between the two modes is the input source, 
-    which is determined by the input_fd variable. When running in batch mode, 
-    input_fd is set to the file descriptor of the specified input file. 
-    When running in interactive mode, input_fd is set to the standard input file 
-    descriptor DIN_FILENO) */
-    
     char buffer[BUFFER_SIZE];
     char *args[MAX_ARGS];
     int arg_count;
     int exit_status;
     int input_fd = STDIN_FILENO;
+    int is_interactive = (argc == 1);
 
-    if (argc == 2) {
-    //If there is an argument provided, the code opens the specified file 
-    //and sets input_fd to the file descriptor of the opened file. 
-    //Otherwise, it sets input_fd to the standard input file descriptor (STDIN_FILENO)
+    if (!is_interactive) {
         input_fd = open(argv[1], O_RDONLY);
         if (input_fd == -1) {
             perror("mysh");
             exit(EXIT_FAILURE);
         }
     } else {
-        write(STDOUT_FILENO, "Welcome to my shell!\n", 20);
+        write(STDOUT_FILENO, "Welcome to my shell!\n", 22);
     }
 
     while (1) {
-    //The main input loop reads input one line at a time, regardless of the mode
-    //In interactive mode, the shell prompt is printed before reading each line.
-        if (input_fd == STDIN_FILENO) {
-            print_prompt();
+        if (is_interactive) {
+            if (last_exit_status != 0) {
+                write(STDOUT_FILENO, "!mysh> ", 7);
+            } else {
+                write(STDOUT_FILENO, "mysh> ", 6);
+            }
         }
 
         ssize_t read_size = 0;
@@ -144,14 +173,19 @@ int main(int argc, char *argv[]) {
 
         arg_count = parse_line(buffer, args);
         exit_status = execute_command(args, arg_count);
+
+        if (exit_status == -1) {
+            break;
+        }
+
         last_exit_status = exit_status;
     }
 
-    if (argc == 2) {
+    if (!is_interactive) {
         close(input_fd);
-    } else {
-        write(STDOUT_FILENO, "mysh: exiting\n", 13);
     }
+
+    write(STDOUT_FILENO, "mysh: exiting\n", 13);
 
     return EXIT_SUCCESS;
 }
