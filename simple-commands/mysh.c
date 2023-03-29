@@ -164,6 +164,23 @@ int execute_command(char **args, int arg_count) {
             close(pipe_fds[1]);
         }
 
+        // Search in specific directories if there's no slash in the command
+        if (strchr(args[0], '/') == NULL) {
+            char *search_dirs[] = {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"};
+            int i;
+            struct stat file_stat;
+            char exec_path[BUFFER_SIZE];
+
+            for (i = 0; i < 6; i++) {
+                snprintf(exec_path, sizeof(exec_path), "%s/%s", search_dirs[i], args[0]);
+                    if (stat(exec_path, &file_stat) == 0 && S_ISREG(file_stat.st_mode) && (file_stat.st_mode & S_IXUSR)) {
+                    execv(exec_path, args);
+                    perror(exec_path);
+                    exit(1);
+                }
+            }
+        }
+
         execvp(args[0], args);
         perror(args[0]);
         exit(1);
@@ -189,8 +206,6 @@ int execute_command(char **args, int arg_count) {
         }
     }
 }
-
-
 
 void print_prompt() {
     if (last_exit_status == 0) {
