@@ -7,109 +7,189 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <glob.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_ARGS 64
-#define DELIMITERS " \t\r\n\a"
+#define DELIMITERS " \t\r\n\a|<>"
 
 int last_exit_status = 0;
+
+void expand_wildcards(char *pattern, char ***args, int *arg_count) {
+    glob_t glob_result;
+
+    glob(pattern, GLOB_NOCHECK, NULL, &glob_result);
+    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
+        (*args)[*arg_count] = strdup(glob_result.gl_pathv[i]);
+        (*arg_count)++;
+    }
+
+    globfree(&glob_result);
+}
 
 int parse_line(char *line, char **args) {
     int arg_count = 0;
     char *token = strtok(line, DELIMITERS);
 
     while (token != NULL) {
-        args[arg_count++] = token;
+        if (strchr(token, '*') != NULL) {
+            expand_wildcards(token, &args, &arg_count);
+        } else {
+            args[arg_count++] = token;
+        }
         token = strtok(NULL, DELIMITERS);
     }
     args[arg_count] = NULL;
     return arg_count;
 }
 
-int execute_command(char *args[], int arg_count) {
+int handle_redirection(char **args, int *input_fd, int *output_fd) {
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "<") == 0) {
+            if (args[i + 1] != NULL) {
+                *input_fd = open(args[i + 1], O_RDONLY);
+                if (*input_fd < 0) {
+                    perror(args[i + 1]);
+                    return 1;
+                }
+                args[i] = NULL;
+            } else {
+                fprintf(stderr, "mysh: syntax error near unexpected token `<'\n");
+                return 1;
+            }
+        } else if (strcmp(args[i], ">") == 0) {
+            if (args[i + 1] != NULL) {
+                *output_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0640);
+                if (*output_fd < 0) {
+                    perror(args[i + 1]);
+                    return 1;
+                }
+                args[i] = NULL;
+            } else {
+                fprintf(stderr, "mysh: syntax error near unexpected token `>'\n");
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int find_pipe_index(char **args) {
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "|") == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int execute_command(char **args, int arg_count) {
+    int input_fd = STDIN_FILENO;
+    int output_fd = STDOUT_FILENO;
+    int pipe_fds[2];
+    int pipe_index = find_pipe_index(args);
+
     if (arg_count == 0) {
         return 0;
     }
-
-    if (strcmp(args[0], "cd") == 0) {
-        if (arg_count > 1) {
-            if (chdir(args[1]) == -1) {
-                perror("cd");
-                return 1;
-            }
-        } else {
-            fprintf(stderr, "cd: missing operand\n");
+    if (pipe_index >= 0) {
+        if (pipe(pipe_fds) == -1) {
+            perror("mysh");
             return 1;
         }
-        return 0;
+        args[pipe_index] = NULL;
     }
 
-    if (strcmp(args[0], "echo") == 0) {
-        for (int i = 1; i < arg_count; i++) {
-            write(STDOUT_FILENO, args[i], strlen(args[i]));
-            write(STDOUT_FILENO, " ", 1);
-        }
-        write(STDOUT_FILENO, "\n", 1);
-        return 0;
+    if (handle_redirection(args, &input_fd, &output_fd)) {
+        return 1;
     }
 
     if (strcmp(args[0], "exit") == 0) {
         return -1;
-    }
-
-    if (strcmp(args[0], "mkdir") == 0) {
-        if (arg_count > 1) {
-            if (mkdir(args[1], 0755) == -1) {
-                perror("mkdir");
-                return 1;
-            }
-        } else {
-            fprintf(stderr, "mkdir: missing operand\n");
+    } else if (strcmp(args[0], "cd") == 0) {
+        if (arg_count != 2) {
+            write(STDERR_FILENO, "mysh: cd requires one argument\n", 31);
             return 1;
         }
-        return 0;
-    }
-
-    if (strcmp(args[0], "pwd") == 0) {
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, PATH_MAX) != NULL) {
-            write(STDOUT_FILENO, cwd, strlen(cwd));
-            write(STDOUT_FILENO, "\n", 1);
-        } else {
-            perror("pwd");
-            return 1;
-        }
-        return 0;
-    }
-
-    pid_t pid = fork();
-
-    if (pid == -1) {
-        perror("mysh");
-        return 1;
-    }
-
-    if (pid == 0) {
-        if (execvp(args[0], args) == -1) {
-            perror(args[0]);
-            exit(EXIT_FAILURE);
-        }
-    } else {
-        int status;
-        if (waitpid(pid, &status, 0) == -1) {
+        if (chdir(args[1]) != 0) {
             perror("mysh");
             return 1;
         }
+        return 0;
+    } else if (strcmp(args[0], "pwd") == 0) {
+        if (arg_count != 1) {
+            write(STDERR_FILENO, "mysh: pwd takes no arguments\n", 29);
+            return 1;
+        }
+        char buf[BUFFER_SIZE];
+        if (getcwd(buf, sizeof(buf)) == NULL) {
+            perror("mysh");
+            return 1;
+        }
+        write(STDOUT_FILENO, buf, strlen(buf));
+        write(STDOUT_FILENO, "\n", 1);
+        return 0;
+    }
+
+    int child_pid = fork();
+
+    if (child_pid == 0) {
+        // Child process
+        if (input_fd != STDIN_FILENO) {
+            dup2(input_fd, STDIN_FILENO);
+            close(input_fd);
+        }
+        if (output_fd != STDOUT_FILENO) {
+            dup2(output_fd, STDOUT_FILENO);
+            close(output_fd);
+        }
+
+        // Handling pipes
+        if (pipe_index >= 0) {
+            int child2_pid = fork();
+
+            if (child2_pid == 0) {
+                // Child process for the second command
+                close(pipe_fds[1]); // Close the write end
+                dup2(pipe_fds[0], STDIN_FILENO); // Redirect stdin to the read end of the pipe
+                close(pipe_fds[0]);
+                execvp(args[pipe_index + 1], args + pipe_index + 1);
+                perror(args[pipe_index + 1]);
+                exit(1);
+            }
+
+            // In the first child process
+            close(pipe_fds[0]); // Close the read end
+            dup2(pipe_fds[1], STDOUT_FILENO); // Redirect stdout to the write end of the pipe
+            close(pipe_fds[1]);
+        }
+
+        execvp(args[0], args);
+        perror(args[0]);
+        exit(1);
+    } else if (child_pid == -1) {
+        perror("mysh");
+        return 1;
+    } else {
+        // Parent process
+        int status;
+        waitpid(child_pid, &status, 0);
+
+        if (input_fd != STDIN_FILENO) {
+            close(input_fd);
+        }
+        if (output_fd != STDOUT_FILENO) {
+            close(output_fd);
+        }
+
         if (WIFEXITED(status)) {
             return WEXITSTATUS(status);
-        } else if (WIFSIGNALED(status)) {
-            fprintf(stderr, "%s terminated by signal %d\n", args[0], WTERMSIG(status));
+        } else {
             return 1;
         }
     }
-
-    return 0;
 }
+
 
 
 void print_prompt() {
@@ -181,11 +261,11 @@ int main(int argc, char *argv[]) {
         last_exit_status = exit_status;
     }
 
+    write(STDOUT_FILENO, "mysh: exiting\n", 14);
+
     if (!is_interactive) {
         close(input_fd);
     }
-
-    write(STDOUT_FILENO, "mysh: exiting\n", 13);
 
     return EXIT_SUCCESS;
 }
