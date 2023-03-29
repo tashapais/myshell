@@ -1,0 +1,45 @@
+touch foo bar baz
+mkdir test
+echo "this is the text for foo" > foo
+echo "this is the text for bar" > foo
+echo "this is the text for baz" > foo
+echo this is a test of echo command
+ls
+pwd
+cd test
+touch new.txt
+echo "This is the text in new.txt" > new.txt
+ls
+pwd
+cd ..
+cat foo
+cat foo bar baz
+cat < input.txt 
+echo "This is a test for output redirection." > output.txt
+cat < foo > output2.txt
+touch file1.txt file2.txt other.txt
+ls | grep file
+echo foo bar > baz
+echo foo > baz bar
+echo > baz foo bar
+sort < foo > bar
+sort > bar < foo
+echo foo > bar | cat
+echo foo > bar > baz
+cat < foo < bar
+echo foo | cat < bar
+pwd > output.txt
+touch foo | cd some_dir
+cd some_dir | pwd
+
+gcc testing.c -o testing
+./testing
+./non
+chmod -x testing
+./testing
+chmod +x testing
+./testing
+
+touch foo | exit
+exit | echo bar
+
