@@ -31,6 +31,8 @@ echo foo | cat < bar
 pwd > output.txt
 touch foo | cd some_dir
 cd some_dir | pwd
+ls test/*.c
+echo */foo
 
 gcc testing.c -o testing
 ./testing
@@ -39,6 +41,8 @@ chmod -x testing
 ./testing
 chmod +x testing
 ./testing
+
+cat script.txt | grep me | unique
 
 touch foo | exit
 exit | echo bar
