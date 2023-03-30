@@ -41,8 +41,8 @@ cat < foo < bar
 echo foo > bar | cat
 echo foo | cat < bar
 pwd > output.txt
-touch foo | cd some_dir
-cd some_dir | pwd
+touch foo | cd test
+cd test | pwd
 
 #testing file wildcards and directory wildcards
 ls test/*.c
@@ -61,13 +61,14 @@ chmod +x testing
 ls ~
 echo ~
 
+#remove created files and directory. comment this out if using second or third exit test
+rm foo other.txt output2.txt testing test
+
 #test exit with pipes
 touch foo | exit
 
-./mysh
-exit | echo bar
+# exit | echo bar
 
-#test exit with redirect
-./mysh
-cd test
-exit > foo
+# #test exit with redirect
+# cd test
+# exit > foo
