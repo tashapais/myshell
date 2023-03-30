@@ -62,7 +62,7 @@ ls ~
 echo ~
 
 #remove created files and directory. comment this out if using second or third exit test
-rm foo other.txt output2.txt testing test
+rm foo bar baz other.txt output2.txt testing test
 
 #test exit with pipes
 touch foo | exit
