@@ -15,12 +15,12 @@ pwd
 cd ..
 
 #test display and redirect commands
+touch file1.txt file2.txt output.txt output2.txt
 cat foo
 cat foo bar baz
 cat < input.txt 
 echo "This is a test for output redirection." > output.txt
 cat < foo > output2.txt
-touch file1.txt file2.txt other.txt
 
 #test basic piping
 ls | grep file
@@ -62,7 +62,7 @@ ls ~
 echo ~
 
 #remove created files and directory. comment this out if using second or third exit test
-rm foo bar baz other.txt output2.txt testing test
+rm foo bar baz test file1.txt file2.txt output.txt output2.txt testing
 
 #test exit with pipes
 touch foo | exit
