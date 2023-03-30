@@ -47,6 +47,8 @@ cd test | pwd
 #testing file wildcards and directory wildcards
 ls test/*.c
 echo */foo
+cat */foo
+echo */*.c
 
 #test compilation and permission modification
 gcc testing.c -o testing
