@@ -61,9 +61,13 @@ chmod +x testing
 ls ~
 echo ~
 
-
-echo 
-
+#test exit with pipes
 touch foo | exit
+
+./mysh
 exit | echo bar
 
+#test exit with redirect
+./mysh
+cd test
+exit > foo
