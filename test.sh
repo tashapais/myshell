@@ -1,9 +1,9 @@
-#set up test environment as well as test basic creation and navigation shell commands
+echo "______Test 1: set up test environment as well as test basic creation and navigation shell commands"
 touch foo bar baz
 mkdir test
 echo "this is the text for foo" > foo
-echo "this is the text for bar" > foo
-echo "this is the text for baz" > foo
+echo "this is the text for bar" > bar
+echo "this is the text for baz" > baz
 echo this is a test of echo command
 ls
 pwd
@@ -13,21 +13,25 @@ echo "This is the text in new.txt" > new.txt
 ls
 pwd
 cd ..
+ls
+pwd
 
-#test display and redirect commands
+echo "______Test 2: test display and redirect commands"
 touch file1.txt file2.txt output.txt output2.txt
 cat foo
 cat foo bar baz
 cat < input.txt 
 echo "This is a test for output redirection." > output.txt
+cat output.txt
 cat < foo > output2.txt
+cat output2.txt
 
-#test basic piping
+echo "________Test 3: test basic piping"
 ls | grep file
 ls | cat
 
 
-#more intense redirect tests
+echo "________Test 4: more intense redirect tests"
 echo foo bar > baz
 echo foo > baz bar
 echo > baz foo bar
@@ -37,19 +41,23 @@ echo foo > bar > baz
 cat < foo < bar
 
 
-#testing the interaction between redirect and pipes. Shouldn't do anything unreasonable
+echo "________Test 5: testing the interaction between redirect and pipes. Shouldn't do anything unreasonable"
 echo foo > bar | cat
 echo foo | cat < bar
 pwd > output.txt
 touch foo | cd test
+pwd
 cd test | pwd
-
-#testing file wildcards and directory wildcards
+pwd
+cd ..
+pwd
+echo "________Test 6: testing file wildcards and directory wildcards"
 ls test/*.c
 echo */foo
 cat foo*
 
-#test compilation and permission modification
+echo "________Test 7: test compilation and permission modification"
+ls
 gcc testing.c -o testing
 ./testing
 ./non
@@ -58,15 +66,19 @@ chmod -x testing
 chmod +x testing
 ./testing
 
-#testing home directory
+echo "________Test 8: testing home directory"
 ls ~
 echo ~
 
-#remove created files and directory. comment this out if using second or third exit test
-rm foo bar baz test file1.txt file2.txt output.txt output2.txt testing
+echo "________Test 9: remove created files and directory. comment this out if using second or third exit test"
+rm foo bar baz file1.txt file2.txt output.txt output2.txt testing
+cd test
+rm new.txt
+cd ..
+rmdir test
 
-#test exit with pipes
-touch foo | exit
+echo "________Test 10: test exit with pipes"
+echo foo | exit
 
 # exit | echo bar
 
