@@ -34,7 +34,15 @@ int parse_line(char *line, char **args) {
     while (token != NULL) {
         if (strchr(token, '*') != NULL) {
             expand_wildcards(token, &args, &arg_count);
-        } else {
+        } else if (token[0] == '~') { //deals with home directory extension
+            char *home = getenv("HOME");
+            char *rest_of_path = token + 1; // Skip the '~' character
+            int path_length = strlen(home) + strlen(rest_of_path) + 1;
+            char *full_path = malloc(path_length * sizeof(char));
+            strcpy(full_path, home);
+            strcat(full_path, rest_of_path);
+            args[arg_count++] = full_path;
+        } else{
             args[arg_count++] = token;
         }
         token = strtok(NULL, DELIMITERS);
@@ -42,6 +50,7 @@ int parse_line(char *line, char **args) {
     args[arg_count] = NULL;
     return arg_count;
 }
+
 
 int handle_redirection(char **args, int *input_fd, int *output_fd) {
     for (int i = 0; args[i] != NULL; i++) {
@@ -100,16 +109,17 @@ int execute_command(char **args, int arg_count) {
     if (strcmp(args[0], "exit") == 0) {
         return -1;
     } else if (strcmp(args[0], "cd") == 0) {
-        if (arg_count != 2) {
-            write(STDERR_FILENO, "mysh: cd requires one argument\n", 31);
+        if (arg_count > 2) {
+            write(STDERR_FILENO, "mysh: cd takes at most one argument\n", 35);
             return 1;
         }
-        if (chdir(args[1]) != 0) {
+        char *dir = (arg_count == 1) ? getenv("HOME") : args[1]; // Use home directory if no argument is provided
+        if (chdir(dir) != 0) {
             perror("mysh");
             return 1;
         }
         return 0;
-    } else if (strcmp(args[0], "pwd") == 0) {
+    }else if (strcmp(args[0], "pwd") == 0) {
         if (arg_count != 1) {
             write(STDERR_FILENO, "mysh: pwd takes no arguments\n", 29);
             return 1;
@@ -275,5 +285,5 @@ int main(int argc, char *argv[]) {
         close(input_fd);
     }
 
-    return EXIT_SUCCESS;
+    return EXIT_SUCCESS; 
 }
